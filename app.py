@@ -1,17 +1,30 @@
 from flask import Flask, request, jsonify
 import requests
 from requests_oauthlib import OAuth1
+import json
+import os
 app = Flask(__name__)
+
+# Load dimensions cache
+cache_path = os.path.join(os.path.dirname(__file__), "dims_cache.json")
+with open(cache_path) as f:
+    DIMS_CACHE = json.load(f)
+print(f"Loaded {len(DIMS_CACHE)} sets from cache")
 CONSUMER_KEY = "592D427AFDE64D58A7884EFA700F10C7"
 CONSUMER_SECRET = "3594251FFA854191915E121187D2E269"
 TOKEN_VALUE = "C786B85CEC0849C69589676DBC1DEF46"
 TOKEN_SECRET = "895C0A261C6740B0A62DCB46D47DAA2C"
 auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_VALUE, TOKEN_SECRET)
 def get_bricklink_data(set_number):
-    url = f"https://api.bricklink.com/api/store/v1/items/SET/{set_number}"
-    r = requests.get(url, auth=auth)
-    if r.status_code == 200:
-        return r.json().get("data", {})
+    if set_number in DIMS_CACHE:
+        return DIMS_CACHE[set_number]
+    try:
+        url = f"https://api.bricklink.com/api/store/v1/items/SET/{set_number}"
+        r = requests.get(url, auth=auth, timeout=5)
+        if r.status_code == 200:
+            return r.json().get("data", {})
+    except:
+        pass
     return {}
 def calculate_rate(weight_g, dim_x_cm, dim_y_cm, dim_z_cm):
     weight_lb = weight_g / 453.592
