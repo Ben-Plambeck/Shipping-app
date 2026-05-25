@@ -53,12 +53,12 @@ def rates():
         sku = item.get("sku", "")
         set_number = "-".join(sku.split("-")[:2])
         bl_data = get_bricklink_data(set_number)
-        weight_g = float(bl_data.get("weight", 0) or 0)
+        shopify_weight_g = float(item.get("grams", 0) or 0)
         dim_x = float(bl_data.get("dim_x", 0) or 0)
         dim_y = float(bl_data.get("dim_y", 0) or 0)
         dim_z = float(bl_data.get("dim_z", 0) or 0)
         qty = item.get("quantity", 1)
-        total_weight_g += (weight_g + 340) * qty
+        total_weight_g += shopify_weight_g * qty
         max_dim_x = max(max_dim_x, dim_x)
         max_dim_y = max(max_dim_y, dim_y)
         max_dim_z = max(max_dim_z, dim_z)
