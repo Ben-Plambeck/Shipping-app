@@ -1,23 +1,18 @@
 from flask import Flask, request, jsonify
 import requests
 from requests_oauthlib import OAuth1
-
 app = Flask(__name__)
-
 CONSUMER_KEY = "592D427AFDE64D58A7884EFA700F10C7"
 CONSUMER_SECRET = "3594251FFA854191915E121187D2E269"
 TOKEN_VALUE = "3FA7803FF9F8473487AD1CA77FCCF4C0"
 TOKEN_SECRET = "E3560584FCB04A0BA30B28EECE6F374C"
-
 auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_VALUE, TOKEN_SECRET)
-
 def get_bricklink_data(set_number):
     url = f"https://api.bricklink.com/api/store/v1/items/SET/{set_number}"
     r = requests.get(url, auth=auth)
     if r.status_code == 200:
         return r.json().get("data", {})
     return {}
-
 def calculate_rate(weight_g, dim_x_cm, dim_y_cm, dim_z_cm):
     weight_lb = weight_g / 453.592
     if dim_x_cm and dim_y_cm and dim_z_cm:
@@ -42,11 +37,9 @@ def calculate_rate(weight_g, dim_x_cm, dim_y_cm, dim_z_cm):
         ground = 5249 + int((billable_lb - 20) * 300)
     priority = int(ground * 1.6)
     return ground, priority
-
 @app.route("/", methods=["GET"])
 def home():
     return "JMB Brick Co Shipping Rate App is running!"
-
 @app.route("/rates", methods=["POST"])
 def rates():
     data = request.json
@@ -69,4 +62,9 @@ def rates():
         max_dim_y = max(max_dim_y, dim_y)
         max_dim_z = max(max_dim_z, dim_z)
     ground, priority = calculate_rate(total_weight_g, max_dim_x, max_dim_y, max_dim_z)
-    return jsonify({"
+    return jsonify({"rates": [
+        {"service_name": "USPS Ground Advantage", "service_code": "usps_ground", "total_price": ground, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None},
+        {"service_name": "USPS Priority Mail", "service_code": "usps_priority", "total_price": priority, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None}
+    ]})
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=10000)
