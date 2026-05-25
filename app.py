@@ -8,7 +8,6 @@ CONSUMER_KEY = "592D427AFDE64D58A7884EFA700F10C7"
 CONSUMER_SECRET = "3594251FFA854191915E121187D2E269"
 TOKEN_VALUE = "3FA7803FF9F8473487AD1CA77FCCF4C0"
 TOKEN_SECRET = "E3560584FCB04A0BA30B28EECE6F374C"
-ORIGIN_ZIP = "93103"
 
 auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_VALUE, TOKEN_SECRET)
 
@@ -19,6 +18,31 @@ def get_bricklink_data(set_number):
         return r.json().get("data", {})
     return {}
 
+def calculate_rate(weight_g, dim_x_cm, dim_y_cm, dim_z_cm):
+    weight_lb = weight_g / 453.592
+    if dim_x_cm and dim_y_cm and dim_z_cm:
+        dim_x_in = dim_x_cm / 2.54
+        dim_y_in = dim_y_cm / 2.54
+        dim_z_in = dim_z_cm / 2.54
+        dim_weight_lb = (dim_x_in * dim_y_in * dim_z_in) / 139
+        billable_lb = max(weight_lb, dim_weight_lb)
+    else:
+        billable_lb = weight_lb
+    if billable_lb <= 1:
+        ground = 899
+    elif billable_lb <= 2:
+        ground = 1099
+    elif billable_lb <= 5:
+        ground = 1299 + int((billable_lb - 2) * 150)
+    elif billable_lb <= 10:
+        ground = 1749 + int((billable_lb - 5) * 200)
+    elif billable_lb <= 20:
+        ground = 2749 + int((billable_lb - 10) * 250)
+    else:
+        ground = 5249 + int((billable_lb - 20) * 300)
+    priority = int(ground * 1.6)
+    return ground, priority
+
 @app.route("/", methods=["GET"])
 def home():
     return "JMB Brick Co Shipping Rate App is running!"
@@ -27,38 +51,28 @@ def home():
 def rates():
     data = request.json
     items = data.get("rate", {}).get("items", [])
-    destination = data.get("rate", {}).get("destination", {})
-    dest_zip = destination.get("postal_code", "90210")
-    
-    total_weight_oz = 0
+    total_weight_g = 0
+    max_dim_x = 0
+    max_dim_y = 0
+    max_dim_z = 0
     for item in items:
         sku = item.get("sku", "")
         set_number = "-".join(sku.split("-")[:2])
         bl_data = get_bricklink_data(set_number)
         weight_g = float(bl_data.get("weight", 0) or 0)
-        weight_oz = (weight_g + 340) / 28.35
-        total_weight_oz += weight_oz * item.get("quantity", 1)
-
-    rates = [
-        {
-            "service_name": "USPS Ground Advantage",
-            "service_code": "usps_ground",
-            "total_price": max(899, int(total_weight_oz * 15)),
-            "currency": "USD",
-            "min_delivery_date": None,
-            "max_delivery_date": None
-        },
-        {
-            "service_name": "USPS Priority Mail",
-            "service_code": "usps_priority",
-            "total_price": max(1299, int(total_weight_oz * 22)),
-            "currency": "USD",
-            "min_delivery_date": None,
-            "max_delivery_date": None
-        }
-    ]
-    
-    return jsonify({"rates": rates})
+        dim_x = float(bl_data.get("dim_x", 0) or 0)
+        dim_y = float(bl_data.get("dim_y", 0) or 0)
+        dim_z = float(bl_data.get("dim_z", 0) or 0)
+        qty = item.get("quantity", 1)
+        total_weight_g += (weight_g + 340) * qty
+        max_dim_x = max(max_dim_x, dim_x)
+        max_dim_y = max(max_dim_y, dim_y)
+        max_dim_z = max(max_dim_z, dim_z)
+    ground, priority = calculate_rate(total_weight_g, max_dim_x, max_dim_y, max_dim_z)
+    return jsonify({"rates": [
+        {"service_name": "USPS Ground Advantage", "service_code": "usps_ground", "total_price": ground, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None},
+        {"service_name": "USPS Priority Mail", "service_code": "usps_priority", "total_price": priority, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None}
+    ]})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
