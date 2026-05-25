@@ -43,6 +43,7 @@ def home():
 @app.route("/rates", methods=["POST"])
 def rates():
     data = request.json
+    print("RECEIVED:", data)
     items = data.get("rate", {}).get("items", [])
     total_weight_g = 0
     max_dim_x = 0
