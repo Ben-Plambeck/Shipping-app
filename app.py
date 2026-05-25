@@ -69,10 +69,4 @@ def rates():
         max_dim_y = max(max_dim_y, dim_y)
         max_dim_z = max(max_dim_z, dim_z)
     ground, priority = calculate_rate(total_weight_g, max_dim_x, max_dim_y, max_dim_z)
-    return jsonify({"rates": [
-        {"service_name": "USPS Ground Advantage", "service_code": "usps_ground", "total_price": ground, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None},
-        {"service_name": "USPS Priority Mail", "service_code": "usps_priority", "total_price": priority, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None}
-    ]})
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    return jsonify({"
