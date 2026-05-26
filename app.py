@@ -5,6 +5,22 @@ import json
 import os
 app = Flask(__name__)
 
+CLIENT_ID = "16a3bd093c84a73f84fd9b8cabddeb8b"
+CLIENT_SECRET = "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"
+SHOP = "jmb-brick-co.myshopify.com"
+SHOPIFY_TOKEN = None
+
+def get_shopify_token():
+    global SHOPIFY_TOKEN
+    url = f"https://{SHOP}/admin/oauth/access_token"
+    payload = {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET, "grant_type": "client_credentials"}
+    r = requests.post(url, json=payload)
+    SHOPIFY_TOKEN = r.json().get("access_token")
+    print(f"Token refreshed!")
+    return SHOPIFY_TOKEN
+
+get_shopify_token()
+
 # Load dimensions cache
 cache_path = os.path.join(os.path.dirname(__file__), "dims_cache.json")
 with open(cache_path) as f:
