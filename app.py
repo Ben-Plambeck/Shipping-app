@@ -5,9 +5,9 @@ import json
 import os
 app = Flask(__name__)
 
-CLIENT_ID = "16a3bd093c84a73f84fd9b8cabddeb8b"
-CLIENT_SECRET = "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"
-SHOP = "jmb-brick-co.myshopify.com"
+CLIENT_ID = os.environ.get("SHOPIFY_CLIENT_ID", "16a3bd093c84a73f84fd9b8cabddeb8b")
+CLIENT_SECRET = os.environ.get("SHOPIFY_CLIENT_SECRET", "")
+SHOP = os.environ.get("SHOPIFY_SHOP", "jmb-brick-co.myshopify.com")
 SHOPIFY_TOKEN = None
 
 def get_shopify_token():
