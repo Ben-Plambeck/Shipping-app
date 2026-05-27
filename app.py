@@ -98,16 +98,16 @@ def get_shippo_rates(weight_g, dim_x_cm, dim_y_cm, dim_z_cm, to_zip, to_country=
 
             if "ground_advantage" in service or "groundadvantage" in service:
                 result["usps_ground"] = price_cents
-                result["usps_ground_name"] = rate.get("servicelevel", {}).get("name", "USPS Ground Advantage")
+                result["usps_ground_name"] = "USPS Ground Advantage"
             elif service == "usps_priority":
                 result["usps_priority"] = price_cents
-                result["usps_priority_name"] = rate.get("servicelevel", {}).get("name", "USPS Priority Mail")
+                result["usps_priority_name"] = "USPS Priority Mail"
             elif service == "ups_ground":
                 result["ups_ground"] = price_cents
-                result["ups_ground_name"] = rate.get("servicelevel", {}).get("name", "UPS Ground")
+                result["ups_ground_name"] = "UPS Ground"
             elif service == "ups_ground_saver":
                 result["ups_ground_saver"] = price_cents
-                result["ups_ground_saver_name"] = rate.get("servicelevel", {}).get("name", "UPS Ground Saver")
+                result["ups_ground_saver_name"] = "UPS Ground Saver"
 
         print(f"Parsed rates: {result}")
         return result
