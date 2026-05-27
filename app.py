@@ -82,7 +82,7 @@ def get_shippo_rates(weight_g, dim_x_cm, dim_y_cm, dim_z_cm, to_zip, to_country=
         )
         print(f"Shippo response status: {r.status_code}")
 
-        if r.status_code != 200:
+        if r.status_code not in (200, 201):
             print(f"Shippo error: {r.text}")
             return None
 
