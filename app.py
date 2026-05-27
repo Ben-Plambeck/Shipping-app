@@ -3,34 +3,34 @@ import requests
 from requests_oauthlib import OAuth1
 import json
 import os
+ 
 app = Flask(__name__)
-
-CLIENT_ID = os.environ.get("SHOPIFY_CLIENT_ID", "16a3bd093c84a73f84fd9b8cabddeb8b")
-CLIENT_SECRET = os.environ.get("SHOPIFY_CLIENT_SECRET", "")
+ 
 SHOP = os.environ.get("SHOPIFY_SHOP", "jmb-brick-co.myshopify.com")
-SHOPIFY_TOKEN = None
-
-def get_shopify_token():
-    global SHOPIFY_TOKEN
-    url = f"https://{SHOP}/admin/oauth/access_token"
-    payload = {"client_id": CLIENT_ID, "client_secret": CLIENT_SECRET, "grant_type": "client_credentials"}
-    r = requests.post(url, json=payload)
-    SHOPIFY_TOKEN = r.json().get("access_token")
-    print(f"Token refreshed!")
-    return SHOPIFY_TOKEN
-
-get_shopify_token()
-
+SHIPPO_API_KEY = os.environ.get("SHIPPO_API_KEY")
+ 
+ORIGIN = {
+    "name": "JMB Brick Co",
+    "street1": "130 S Patterson Ave Unit 135",
+    "city": "Goleta",
+    "state": "CA",
+    "zip": "93116",
+    "country": "US",
+    "phone": "8056965288"
+}
+ 
 # Load dimensions cache
 cache_path = os.path.join(os.path.dirname(__file__), "dims_cache.json")
 with open(cache_path) as f:
     DIMS_CACHE = json.load(f)
 print(f"Loaded {len(DIMS_CACHE)} sets from cache")
-CONSUMER_KEY = "592D427AFDE64D58A7884EFA700F10C7"
-CONSUMER_SECRET = "3594251FFA854191915E121187D2E269"
-TOKEN_VALUE = "C786B85CEC0849C69589676DBC1DEF46"
-TOKEN_SECRET = "895C0A261C6740B0A62DCB46D47DAA2C"
+ 
+CONSUMER_KEY    = os.environ.get("BL_CONSUMER_KEY",    "592D427AFDE64D58A7884EFA700F10C7")
+CONSUMER_SECRET = os.environ.get("BL_CONSUMER_SECRET", "3594251FFA854191915E121187D2E269")
+TOKEN_VALUE     = os.environ.get("BL_TOKEN_VALUE",     "C786B85CEC0849C69589676DBC1DEF46")
+TOKEN_SECRET    = os.environ.get("BL_TOKEN_SECRET",    "895C0A261C6740B0A62DCB46D47DAA2C")
 auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_VALUE, TOKEN_SECRET)
+ 
 def get_bricklink_data(set_number):
     if set_number in DIMS_CACHE:
         return DIMS_CACHE[set_number]
@@ -42,59 +42,149 @@ def get_bricklink_data(set_number):
     except:
         pass
     return {}
-def calculate_rate(weight_g, dim_x_cm, dim_y_cm, dim_z_cm):
-    weight_lb = weight_g / 453.592
-    if dim_x_cm and dim_y_cm and dim_z_cm:
-        dim_x_in = dim_x_cm / 2.54
-        dim_y_in = dim_y_cm / 2.54
-        dim_z_in = dim_z_cm / 2.54
-        dim_weight_lb = (dim_x_in * dim_y_in * dim_z_in) / 139
-        billable_lb = max(weight_lb, dim_weight_lb)
-    else:
-        billable_lb = weight_lb
-    if billable_lb <= 1:
-        ground = 899
-    elif billable_lb <= 2:
-        ground = 1099
-    elif billable_lb <= 5:
-        ground = 1299 + int((billable_lb - 2) * 150)
-    elif billable_lb <= 10:
-        ground = 1749 + int((billable_lb - 5) * 200)
-    elif billable_lb <= 20:
-        ground = 2749 + int((billable_lb - 10) * 250)
-    else:
-        ground = 5249 + int((billable_lb - 20) * 300)
-    priority = int(ground * 1.6)
-    return ground, priority
+ 
+def get_shippo_rates(weight_g, dim_x_cm, dim_y_cm, dim_z_cm, to_zip, to_country="US"):
+    """Call Shippo API for live rates using native cm and grams."""
+ 
+    # Minimum box size fallback if dims are missing
+    length = max(float(dim_x_cm or 0), 6.0)
+    width  = max(float(dim_y_cm or 0), 4.0)
+    height = max(float(dim_z_cm or 0), 2.0)
+    weight = max(float(weight_g or 0), 100.0)  # minimum 100g
+ 
+    headers = {
+        "Authorization": f"ShippoToken {SHIPPO_API_KEY}",
+        "Content-Type": "application/json"
+    }
+ 
+    payload = {
+        "address_from": ORIGIN,
+        "address_to": {
+            "zip": to_zip,
+            "country": to_country
+        },
+        "parcels": [{
+            "length": str(round(length, 2)),
+            "width":  str(round(width, 2)),
+            "height": str(round(height, 2)),
+            "distance_unit": "cm",
+            "weight": str(round(weight, 2)),
+            "mass_unit": "g"
+        }],
+        "async": False
+    }
+ 
+    print(f"Shippo request: weight={weight}g, dims={length}x{width}x{height}cm, to={to_zip}")
+ 
+    try:
+        r = requests.post(
+            "https://api.goshippo.com/shipments/",
+            headers=headers,
+            json=payload,
+            timeout=10
+        )
+        print(f"Shippo response status: {r.status_code}")
+ 
+        if r.status_code != 200:
+            print(f"Shippo error: {r.text}")
+            return None
+ 
+        rates = r.json().get("rates", [])
+        print(f"Got {len(rates)} rates from Shippo")
+ 
+        result = {}
+        for rate in rates:
+            service = rate.get("servicelevel", {}).get("token", "")
+            price_cents = int(float(rate.get("amount", 0)) * 100)
+ 
+            if "usps_groundadvantage" in service or "usps_ground_advantage" in service:
+                result["ground"] = price_cents
+                result["ground_name"] = rate.get("servicelevel", {}).get("name", "USPS Ground Advantage")
+            elif "usps_priority" in service:
+                result["priority"] = price_cents
+                result["priority_name"] = rate.get("servicelevel", {}).get("name", "USPS Priority Mail")
+ 
+        print(f"Parsed rates: {result}")
+        return result
+ 
+    except Exception as e:
+        print(f"Shippo exception: {e}")
+        return None
+ 
 @app.route("/", methods=["GET"])
 def home():
     return "JMB Brick Co Shipping Rate App is running!"
+ 
 @app.route("/rates", methods=["POST"])
 def rates():
     data = request.json
     print("RECEIVED:", data)
-    items = data.get("rate", {}).get("items", [])
+ 
+    rate_data    = data.get("rate", {})
+    items        = rate_data.get("items", [])
+    destination  = rate_data.get("destination", {})
+    to_zip       = destination.get("postal_code", "90210")
+    to_country   = destination.get("country", "US")
+ 
     total_weight_g = 0
     max_dim_x = 0
     max_dim_y = 0
     max_dim_z = 0
+ 
     for item in items:
-        sku = item.get("sku", "")
+        sku        = item.get("sku", "")
         set_number = "-".join(sku.split("-")[:2])
-        bl_data = get_bricklink_data(set_number)
+        bl_data    = get_bricklink_data(set_number)
+ 
         shopify_weight_g = float(item.get("grams", 0) or 0)
         dim_x = float(bl_data.get("dim_x", 0) or 0)
         dim_y = float(bl_data.get("dim_y", 0) or 0)
         dim_z = float(bl_data.get("dim_z", 0) or 0)
-        qty = item.get("quantity", 1)
+        qty   = item.get("quantity", 1)
+ 
         total_weight_g += shopify_weight_g * qty
         max_dim_x = max(max_dim_x, dim_x)
         max_dim_y = max(max_dim_y, dim_y)
         max_dim_z = max(max_dim_z, dim_z)
-    ground, priority = calculate_rate(total_weight_g, max_dim_x, max_dim_y, max_dim_z)
-    return jsonify({"rates": [
-        {"service_name": "USPS Ground Advantage", "service_code": "usps_ground", "total_price": ground, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None},
-        {"service_name": "USPS Priority Mail", "service_code": "usps_priority", "total_price": priority, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None}
-    ]})
+ 
+    shippo_rates = get_shippo_rates(
+        total_weight_g, max_dim_x, max_dim_y, max_dim_z,
+        to_zip, to_country
+    )
+ 
+    if shippo_rates:
+        rate_list = []
+        if "ground" in shippo_rates:
+            rate_list.append({
+                "service_name": shippo_rates.get("ground_name", "USPS Ground Advantage"),
+                "service_code": "usps_ground",
+                "total_price":  shippo_rates["ground"],
+                "currency":     "USD",
+                "min_delivery_date": None,
+                "max_delivery_date": None
+            })
+        if "priority" in shippo_rates:
+            rate_list.append({
+                "service_name": shippo_rates.get("priority_name", "USPS Priority Mail"),
+                "service_code": "usps_priority",
+                "total_price":  shippo_rates["priority"],
+                "currency":     "USD",
+                "min_delivery_date": None,
+                "max_delivery_date": None
+            })
+        return jsonify({"rates": rate_list})
+ 
+    else:
+        # Fallback if Shippo fails — basic flat rate so checkout never breaks
+        print("Shippo failed, using fallback rate")
+        return jsonify({"rates": [{
+            "service_name": "USPS Ground Advantage",
+            "service_code": "usps_ground",
+            "total_price":  1099,
+            "currency":     "USD",
+            "min_delivery_date": None,
+            "max_delivery_date": None
+        }]})
+ 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
