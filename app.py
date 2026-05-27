@@ -97,11 +97,17 @@ def get_shippo_rates(weight_g, dim_x_cm, dim_y_cm, dim_z_cm, to_zip, to_country=
             print(f"Rate found: {service} = ${rate.get('amount')}")
 
             if "ground_advantage" in service or "groundadvantage" in service:
-                result["ground"] = price_cents
-                result["ground_name"] = rate.get("servicelevel", {}).get("name", "USPS Ground Advantage")
+                result["usps_ground"] = price_cents
+                result["usps_ground_name"] = rate.get("servicelevel", {}).get("name", "USPS Ground Advantage")
             elif service == "usps_priority":
-                result["priority"] = price_cents
-                result["priority_name"] = rate.get("servicelevel", {}).get("name", "USPS Priority Mail")
+                result["usps_priority"] = price_cents
+                result["usps_priority_name"] = rate.get("servicelevel", {}).get("name", "USPS Priority Mail")
+            elif service == "ups_ground":
+                result["ups_ground"] = price_cents
+                result["ups_ground_name"] = rate.get("servicelevel", {}).get("name", "UPS Ground")
+            elif service == "ups_ground_saver":
+                result["ups_ground_saver"] = price_cents
+                result["ups_ground_saver_name"] = rate.get("servicelevel", {}).get("name", "UPS Ground Saver")
 
         print(f"Parsed rates: {result}")
         return result
@@ -153,20 +159,38 @@ def rates():
 
     if shippo_rates:
         rate_list = []
-        if "ground" in shippo_rates:
+        if "usps_ground" in shippo_rates:
             rate_list.append({
-                "service_name": shippo_rates.get("ground_name", "USPS Ground Advantage"),
+                "service_name": shippo_rates.get("usps_ground_name", "USPS Ground Advantage"),
                 "service_code": "usps_ground",
-                "total_price":  shippo_rates["ground"],
+                "total_price":  shippo_rates["usps_ground"],
                 "currency":     "USD",
                 "min_delivery_date": None,
                 "max_delivery_date": None
             })
-        if "priority" in shippo_rates:
+        if "usps_priority" in shippo_rates:
             rate_list.append({
-                "service_name": shippo_rates.get("priority_name", "USPS Priority Mail"),
+                "service_name": shippo_rates.get("usps_priority_name", "USPS Priority Mail"),
                 "service_code": "usps_priority",
-                "total_price":  shippo_rates["priority"],
+                "total_price":  shippo_rates["usps_priority"],
+                "currency":     "USD",
+                "min_delivery_date": None,
+                "max_delivery_date": None
+            })
+        if "ups_ground" in shippo_rates:
+            rate_list.append({
+                "service_name": shippo_rates.get("ups_ground_name", "UPS Ground"),
+                "service_code": "ups_ground",
+                "total_price":  shippo_rates["ups_ground"],
+                "currency":     "USD",
+                "min_delivery_date": None,
+                "max_delivery_date": None
+            })
+        if "ups_ground_saver" in shippo_rates:
+            rate_list.append({
+                "service_name": shippo_rates.get("ups_ground_saver_name", "UPS Ground Saver"),
+                "service_code": "ups_ground_saver",
+                "total_price":  shippo_rates["ups_ground_saver"],
                 "currency":     "USD",
                 "min_delivery_date": None,
                 "max_delivery_date": None
