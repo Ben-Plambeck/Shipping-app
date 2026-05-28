@@ -84,9 +84,9 @@ def get_bricklink_data(set_number):
 
 def get_shippo_rates(weight_g, dim_x_cm, dim_y_cm, dim_z_cm, to_zip, to_country="US"):
     # Add 5.08cm (2 inches) to each dimension to account for shipping box
-    length = max(float(dim_x_cm or 0), 6.0) + 5.08
-    width  = max(float(dim_y_cm or 0), 4.0) + 5.08
-    height = max(float(dim_z_cm or 0), 2.0) + 5.08
+    length = max(float(dim_x_cm or 0), 6.0) + 12.7
+    width  = max(float(dim_y_cm or 0), 4.0) + 12.7
+    height = max(float(dim_z_cm or 0), 2.0) + 12.7
     weight = max(float(weight_g or 0), 100.0)
 
     headers = {
