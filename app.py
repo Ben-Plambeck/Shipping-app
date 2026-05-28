@@ -3,11 +3,18 @@ import requests
 from requests_oauthlib import OAuth1
 import json
 import os
+import threading
+import time
 
 app = Flask(__name__)
 
 SHOP = os.environ.get("SHOPIFY_SHOP", "jmb-brick-co.myshopify.com")
+SHOPIFY_CLIENT_ID = os.environ.get("SHOPIFY_CLIENT_ID", "16a3bd093c84a73f84fd9b8cabddeb8b")
+SHOPIFY_CLIENT_SECRET = os.environ.get("SHOPIFY_CLIENT_SECRET", "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")
 SHIPPO_API_KEY = os.environ.get("SHIPPO_API_KEY")
+
+SHOPIFY_TOKEN = None
+TOKEN_LOCK = threading.Lock()
 
 ORIGIN = {
     "name": "JMB Brick Co",
@@ -30,6 +37,38 @@ CONSUMER_SECRET = os.environ.get("BL_CONSUMER_SECRET", "3594251FFA854191915E1211
 TOKEN_VALUE     = os.environ.get("BL_TOKEN_VALUE",     "C786B85CEC0849C69589676DBC1DEF46")
 TOKEN_SECRET    = os.environ.get("BL_TOKEN_SECRET",    "895C0A261C6740B0A62DCB46D47DAA2C")
 auth = OAuth1(CONSUMER_KEY, CONSUMER_SECRET, TOKEN_VALUE, TOKEN_SECRET)
+
+FLAT_RATE_FALLBACK = [
+    {"service_name": "USPS Ground Advantage", "service_code": "usps_ground", "total_price": 1500, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None},
+    {"service_name": "UPS Ground", "service_code": "ups_ground", "total_price": 1500, "currency": "USD", "min_delivery_date": None, "max_delivery_date": None}
+]
+
+def refresh_shopify_token():
+    global SHOPIFY_TOKEN
+    try:
+        r = requests.post(
+            f"https://{SHOP}/admin/oauth/access_token",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data=f"grant_type=client_credentials&client_id={SHOPIFY_CLIENT_ID}&client_secret={SHOPIFY_CLIENT_SECRET}",
+            timeout=10
+        )
+        if r.status_code == 200:
+            with TOKEN_LOCK:
+                SHOPIFY_TOKEN = r.json().get("access_token")
+            print(f"Shopify token refreshed successfully!")
+        else:
+            print(f"Failed to refresh Shopify token: {r.status_code} {r.text}")
+    except Exception as e:
+        print(f"Error refreshing Shopify token: {e}")
+
+def token_refresh_loop():
+    while True:
+        refresh_shopify_token()
+        time.sleep(12 * 60 * 60)  # 12 hours
+
+refresh_shopify_token()
+refresh_thread = threading.Thread(target=token_refresh_loop, daemon=True)
+refresh_thread.start()
 
 def get_bricklink_data(set_number):
     if set_number in DIMS_CACHE:
@@ -135,6 +174,7 @@ def rates():
     max_dim_x = 0
     max_dim_y = 0
     max_dim_z = 0
+    has_dims = False
 
     for item in items:
         sku        = item.get("sku", "")
@@ -151,6 +191,14 @@ def rates():
         max_dim_x = max(max_dim_x, dim_x)
         max_dim_y = max(max_dim_y, dim_y)
         max_dim_z = max(max_dim_z, dim_z)
+
+        if dim_x > 0 and dim_y > 0 and dim_z > 0:
+            has_dims = True
+
+    # If no valid dimensions found, return $15 flat rate
+    if not has_dims:
+        print(f"No dimensions found for items, returning $15 flat rate")
+        return jsonify({"rates": FLAT_RATE_FALLBACK})
 
     shippo_rates = get_shippo_rates(
         total_weight_g, max_dim_x, max_dim_y, max_dim_z,
@@ -198,15 +246,8 @@ def rates():
         return jsonify({"rates": rate_list})
 
     else:
-        print("Shippo failed, using fallback rate")
-        return jsonify({"rates": [{
-            "service_name": "USPS Ground Advantage",
-            "service_code": "usps_ground",
-            "total_price":  1099,
-            "currency":     "USD",
-            "min_delivery_date": None,
-            "max_delivery_date": None
-        }]})
+        print("Shippo failed, using $15 flat rate fallback")
+        return jsonify({"rates": FLAT_RATE_FALLBACK})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
